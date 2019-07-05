@@ -374,6 +374,8 @@ struct graph *choose_graph(struct graph *src, struct graph *dst)
 
 	list_splice(&src->node_list, &dst->node_list);
 	dst->nodes_num += src->nodes_num;
+	dst->entry = start;
+	dst->accept = end;
 	if (src->accept_group)
 		release_set_group(src->accept_group);
 	free(src);
