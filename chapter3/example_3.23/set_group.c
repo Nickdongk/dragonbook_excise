@@ -107,6 +107,7 @@ void push_to_group(struct set_group *group, void *data)
 struct set_node * pop_from_group(struct set_group *group)
 {
 	struct list_head *tmp = group->set_nodes.prev;
+	struct set_node *tmp_node = NULL;
 
 	if(list_empty(&group->set_nodes)) {
 		return NULL;
@@ -115,7 +116,7 @@ struct set_node * pop_from_group(struct set_group *group)
 	list_del(tmp);
 	group->nodes_num --;
 
-	return contain_of(tmp, struct set_node, node);
+	return container_of(tmp, struct set_node, node);
 }
 
 struct set_node *check_group_top(struct set_group *group)
@@ -126,11 +127,16 @@ struct set_node *check_group_top(struct set_group *group)
 		return NULL;
 	}
 
-	return contain_of(tmp, struct set_node, node);
+	return container_of(tmp, struct set_node, node);
 
 }
 
 int check_group_empty(struct set_group *group)
 {
 	return !group->nodes_num;
+}
+
+int get_nodes_num(struct set_group *group)
+{
+	return group->nodes_num;
 }
