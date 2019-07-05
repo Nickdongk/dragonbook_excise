@@ -1,6 +1,8 @@
 #ifndef _SET_GROUP_H_
 #define _SET_GROUP_H_
 
+#include "list.h"
+
 struct set_node {
 	struct list_head node;
 	void *body;
@@ -31,7 +33,7 @@ extern struct set_group *get_set_group(set_node_callback func);
  *
  *  \return void
  */
-extern void release_set_group(struct set_group *group)
+extern void release_set_group(struct set_group *group);
 /**
  *  \brief   compare two set group
  *
@@ -40,9 +42,9 @@ extern void release_set_group(struct set_group *group)
  *
  *  \return  1 src is equal dst, 0 not equal
  */
-extern int compare_set_group(struct set_group *src_group, struct set_group *dst_group)
+extern int compare_set_group(struct set_group *src_group, struct set_group *dst_group);
 
-extern void add_to_group(struct set_group *group, void *data)
+extern void add_to_group(struct set_group *group, void *data);
 
 extern void traverse_set_group(struct set_group *group, void *priv);
 
@@ -50,5 +52,11 @@ extern struct set_node *pop_from_group(struct set_group *group);
 
 extern void push_to_group(struct set_group *group, void *data);
 
+extern struct set_node *pop_from_group(struct set_group *group);
+
 extern struct set_node *check_group_top(struct set_group *group);
+
+extern int check_group_empty(struct set_group *group);
+
+extern int get_nodes_num(struct set_group *group);
 #endif //_SET_GROUP_H_
