@@ -1,10 +1,10 @@
 #ifndef _GRAMMER_PARSE_H_
 #define _GRAMMER_PARSE_H_
 
-#include <set.h>
+#include <multimap.h>
 
 struct grammer {
-	char **end_symmbol;
+	char **end_symbol;
 	unsigned int end_symbol_size;
 	char **no_end_symbol;
 	unsigned int no_end_size;
@@ -12,17 +12,13 @@ struct grammer {
 	unsigned int gen_func_size;
 	char *s_symbol;
 
-	struct set *gen_func_group;
-	char *global_p;
+	struct multimap *gen_func_group;
+	char *g_p;
 	char *g_p_next;
-	struct tree_node *grammer_tree_root;
+    char *g_p_end;
+	struct general_tree tree;
 };
 
-struct trans_node {
-	int flag;
-	char *key;
-	char *val;
-};
 
 extern struct grammer *get_grammer_entity(char **end_sym, unsigned int end_sym_size, char **no_end_sym,
 					  unsigned int no_end_size, char **trans, unsigned int trans_size,

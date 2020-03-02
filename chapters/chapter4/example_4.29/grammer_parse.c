@@ -3,37 +3,36 @@
 #include <stdint.h>
 #include <string.h>
 #include <list.h>
-#include "tree.h"
+#include <general_tree.h>
 #include "grammer_parse.h"
 
 #define ARRAY_SIZE(a)	(sizeof(a)/sizeof(a[0]))
 
-struct tree_node *renum_chld_nodes(struct tree_node *node, unsigned int num)
+
+char *grammer_trans[] = {
+	"S:cAd",
+	"A:ab|a"
+};
+
+char *start_sym = "S";
+
+char *g_end_sym[] = {
+	"a",
+	"b",
+	"c",
+	"d"
+};
+
+char *g_no_end_sym[] = {
+	"A",
+	"S"
+};
+
+
+static void parse_add_trans_node(char *str, struct multimap *map)
 {
-	struct tree_node *tmp = NULL;
-	int i = 0;
-
-	if (num < 3)
-		return node;
-
-	tmp = realloc(node, sizeof(struct tree_node) +  num * sizeof(struct tree_node *));
-	if (!tmp) {
-		perror("fail to realloc tree_node\n");
-		return NULL;
-	}
-
-	for (i = 3; i < num; i ++) {
-		tmp->nodes[i] = NULL;
-	}
-
-	tmp->node_num = num;
-
-	return tmp;
-}
-
-static void parse_add_trans_node(char *str, struct set_group *group)
-{
-	struct trans_node *tmp = NULL;
+    char *key_buf = NULL;
+    char *val_buf = NULL;
 	char *key_str = NULL;
 	int key_str_size = 0;
 	char *val_str = NULL;
@@ -43,7 +42,7 @@ static void parse_add_trans_node(char *str, struct set_group *group)
 
 	val_str = strstr(str, ":");
 	if (!val_str) {
-		fprintf(stderr, "fail to find |, wrong format\n");
+		fprintf(stderr, "fail to find :, wrong format\n");
 		exit(-1);
 	}
 
@@ -65,31 +64,26 @@ static void parse_add_trans_node(char *str, struct set_group *group)
 		else
 			val_str_size = strlen(val_str);
 
-		tmp = malloc(sizeof(struct trans_node));
-		if (!tmp) {
-			perror("fail malloc grammer node\n");
-			exit(-1);
-		}
 
-		tmp->flag = 0;
-		tmp->key = malloc(key_str_size + 1);
-		if (!tmp->key) {
+		key_buf = malloc(key_str_size + 1);
+		if (!key_buf) {
 			perror("fail malloc gramer key\n");
 			exit(-1);
 		}
 
-		tmp->val = malloc(val_str_size + 1);
-		if (!tmp->val) {
+		val_buf = malloc(val_str_size + 1);
+		if (!val_buf) {
 			perror("fail malloc grammer val\n");
 			exit(-1);
 		}
 
-		memcpy(tmp->key, key_str, key_str_size);
-		tmp->key[key_str_size] = '\0';
-		memcpy(tmp->val, val_str, val_str_size);
-		tmp->val[val_str_size] = '\0';
+		memcpy(key_buf, key_str, key_str_size);
+		key_buf[key_str_size] = '\0';
+		memcpy(val_buf, val_str, val_str_size);
+		val_buf[val_str_size] = '\0';
 
-		add_to_group(group, (void *)tmp);
+		multimap_add(map, key_buf, val_buf, val_str_size + 1);
+        free(key_buf);
 		r_size = r_size - val_str_size;
 		if (tmp_str) {
 			val_str = tmp_str + 1;
@@ -100,24 +94,15 @@ static void parse_add_trans_node(char *str, struct set_group *group)
 	return;
 }
 
-void free_trans_node(struct trans_node *node)
+void do_multimap_node(struct multimap_list_n *list_n)
 {
-	free(node->key);
-	free(node->val);
-	free(node);
-}
-
-void trans_node_callback(struct set_node *node, void *pdata)
-{
-	free_trans_node((struct trans_node *)node->body);
-	return;
+    free(list_n->val);
 }
 
 void release_grammer(struct grammer *gr)
 {
-	gr->gen_func_group->func = trans_node_callback;
-	traverse_set_group(gr->gen_func_group, NULL);
-	release_set_group(gr->gen_func_group);
+    multimap_release(gr->gen_func_group, do_multimap_node);
+    release_tree(gr->tree.root);
 	free(gr);
 }
 
@@ -145,53 +130,154 @@ int check_no_end_sym(struct grammer *gr, char *str)
 	return 0;
 }
 
-int spread_trans(struct grammer *grm, char *key)
+struct multimap_n *get_noend_gen(struct grammer *grm, char *key)
 {
 	int ret = 0;
+    struct multimap_n *pmultimap_n = NULL;
 
 	ret = check_end_sym(grm, key);
 	if (ret)
-		return -1;
+		return NULL;
 	ret = check_no_end_sym(grm, key);
 	if (!ret)
-		return -2;
-	if ()
+		return NULL;
+
+    pmultimap_n = multimap_get(grm->gen_func_group, key);
+    if (!pmultimap_n) {
+        fprintf(stderr, "can't get key set\n");
+        return NULL;
+    }
+
+    return pmultimap_n;
+
 }
 
-struct trans_node *parse_str(struct grammer *gr, char *str)
+void spread_noend(struct tree_node *cur, char *val)
+{
+    struct tree_node *pnode = NULL;
+    size_t val_len = strlen(val);
+    int i = 0;
+
+    for (i = 0; i < val_len; i ++) {
+        pnode = tree_node_alloc_nc(NULL, (unsigned int)*(val + i), DEFAULT_TREE_NODE_SIZE);
+        if (!pnode) {
+            fprintf(stderr, " fail to alloc tree node\n");
+            return;
+        }
+
+        tree_add_node(cur->tree, cur, pnode);
+    }
+}
+
+int is_start_sym(char *key)
+{
+    return *key == *start_sym;
+}
+
+int str_to_node(struct grammer *gr, struct tree_node *cur_ptr_node)
+{
+    struct multimap_n *val_set = NULL;
+    struct multimap_list_n *tmp_list_n = NULL;
+    char *p_enter = NULL;
+    int flag = 0;
+    struct tree_node *tmp_node = NULL;
+    struct tree_node *ret_node = NULL;
+    int i = 0;
+    int ret = 0;
+    int back_up = 0;
+
+    flag = is_start_sym((char *)&cur_ptr_node->key);
+    p_enter = gr->g_p_next;
+    /* spread start symbol */
+    val_set = get_noend_gen(gr, (char *)&cur_ptr_node->key);
+    if (!val_set) {
+        fprintf(stderr, "fail to get noend gen\n");
+        return -1;
+    }
+
+            list_for_each_entry(tmp_list_n, &val_set->entry, head) {
+                    //choose this gen function
+                    spread_noend(cur_ptr_node,
+                            tmp_list_n->val);
+                    i = 0;
+                    tmp_node = cur_ptr_node;
+                    /*from the first symbol*/
+                    cur_ptr_node = cur_ptr_node->nodes[i];
+
+                    while (cur_ptr_node && gr->g_p_next != gr->g_p_end) {
+                        ret = check_end_sym(gr, (char *)&cur_ptr_node->key);
+                        if (ret) {
+                            /*if it is a terminal symbol*/
+                            if (*(gr->g_p_next) != cur_ptr_node->key) {
+                                //back up
+                                break;
+                            }
+                            gr->g_p_next ++;
+                        } else {
+                            /*if it is a non-terminal symbol, spread it here*/
+                            /*if it is left recursion, it will infinite*/
+                            ret = str_to_node(gr, cur_ptr_node);
+                            if (ret < 0)
+                                break;
+                        }
+
+                        tmp_node = cur_ptr_node;
+                        cur_ptr_node = cur_ptr_node->parent->nodes[++ i];
+                    }
+
+                    if (ret < 0)
+                        continue;
+
+                    if (cur_ptr_node) {
+                        cur_ptr_node = cur_ptr_node->parent;
+                        back_up = tree_chld_tree_size(cur_ptr_node) - 2;
+                        tree_remove_chld_tree(cur_ptr_node);
+                        gr->g_p_next -= back_up;
+                    } else {
+                        if (gr->g_p_next != gr->g_p_end && flag) {
+                            cur_ptr_node = tmp_node->parent;
+                            back_up = tree_chld_tree_size(cur_ptr_node) - 2;
+                            tree_remove_chld_tree(cur_ptr_node);
+                            gr->g_p_next -= back_up;
+                        } else if (gr->g_p_next != gr->g_p_end && !flag ) {
+                           return 1;
+                        } else if (gr->g_p_next == gr->g_p_end) {
+                            ret_node = tree_last_node(&gr->tree);
+                            if (ret_node == tmp_node)
+                                return 1;
+                        }
+                    }
+            }
+
+            return -1;
+
+}
+
+int parse_str(struct grammer *gr, char *str)
 {
 
 	struct tree_node *cur_ptr_node = NULL;
-	int size = strlen(str);
-	char *end_p = str + size;
+    int ret = 0;
+    int i = 0;
 
-	gr->global_p = str;
+	gr->g_p = str;
+    gr->g_p_next = str;
+    gr->g_p_end = str + strlen(str);
 
-	while (gr->global_p != end_p) {
+    cur_ptr_node =  tree_node_alloc_nc(NULL, *start_sym, DEFAULT_TREE_NODE_SIZE);
+    if (!cur_ptr_node) {
+        fprintf(stderr, "fail to alloc tree node\n");
+        return -1;
+    }
 
-	}
+    tree_add_node(&gr->tree, NULL, cur_ptr_node);
+    ret = str_to_node(gr, cur_ptr_node);
+
+    return ret;
 }
 
-char *grammer_trans[] = {
-	"S:cAd",
-	"A:ab|a"
-};
 
-char *start_sym = "S";
-
-char *end_sym[] = {
-	"a",
-	"b",
-	"c",
-	"d"
-};
-
-char *no_end_sym[] = {
-	"A",
-	"S"
-};
-
-struct grammer * get_grammer_entity(char **end_sym, unsigned int end_sym_size,
+struct grammer* get_grammer_entity(char **end_sym, unsigned int end_sym_size,
 				    char **no_end_sym, unsigned int no_end_size,
 				    char **trans, unsigned int trans_size, char *s_sym)
 {
@@ -212,10 +298,12 @@ struct grammer * get_grammer_entity(char **end_sym, unsigned int end_sym_size,
 	grmr_tmp->gen_func_size = trans_size;
 	grmr_tmp->s_symbol = s_sym;
 
-	grmr_tmp->gen_func_group = get_set_group(NULL);
-	grmr_tmp->global_p = NULL;
+	grmr_tmp->gen_func_group = multimap_create();
+	grmr_tmp->g_p = NULL;
 	grmr_tmp->g_p_next = NULL;
-	grmr_tmp->gramer_tree_root = NULL;
+    grmr_tmp->g_p_end = NULL;
+	grmr_tmp->tree.root = NULL;
+    grmr_tmp->tree.count = 0;
 
 	for (i = 0; i < trans_size; i ++) {
 		parse_add_trans_node(trans[i], grmr_tmp->gen_func_group);
@@ -224,4 +312,32 @@ struct grammer * get_grammer_entity(char **end_sym, unsigned int end_sym_size,
 	return grmr_tmp;
 }
 
+int main(int argc, char *argv[])
+{
+    char *str = NULL;
+    struct grammer *global_gr = NULL;
+    int ret = 0;
 
+    if (argc != 2) {
+        fprintf(stderr, "%s str\n", argv[0]);
+        return -1;
+    }
+
+    str = argv[1];
+
+    printf("start parse str\n");
+
+
+    global_gr = get_grammer_entity(g_end_sym, ARRAY_SIZE(g_end_sym),
+				    g_no_end_sym, ARRAY_SIZE(g_no_end_sym),
+				    grammer_trans, ARRAY_SIZE(grammer_trans), start_sym);
+
+    ret = parse_str(global_gr, str);
+
+    if (ret > 0)
+        tree_traverse_key(&global_gr->tree);
+    else
+        printf("can not parse with this grammer parser\n");
+
+    release_grammer(global_gr);
+}
